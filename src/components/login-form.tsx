@@ -13,7 +13,7 @@ import { AlertCircle } from 'lucide-react';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('manager@clearvue.dev');
-  const [password, setPassword] = useState('password');
+  const [password, setPassword] = useState('120Zx');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -71,9 +71,8 @@ export default function LoginForm() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Demo Accounts</AlertTitle>
           <AlertDescription>
-            <p>Manager: manager@clearvue.dev</p>
-            <p>Team: team@clearvue.dev</p>
-            <p>Password: password</p>
+            <p>Manager: manager@clearvue.dev (password: 120Zx)</p>
+            <p>Team: team@clearvue.dev (password: password)</p>
           </AlertDescription>
         </Alert>
       <Button type="submit" className="w-full" disabled={loading}>
