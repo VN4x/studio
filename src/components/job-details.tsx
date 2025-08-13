@@ -1,7 +1,6 @@
 "use client";
 
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { storage } from '@/lib/storage';
 import type { Job } from '@/lib/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from './ui/badge';
@@ -14,6 +13,7 @@ interface JobDetailsProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   isManager: boolean;
+  onUpdate?: () => void;
 }
 
 const statusColors: { [key: string]: string } = {
@@ -23,17 +23,17 @@ const statusColors: { [key: string]: string } = {
   Problem: 'bg-red-100 text-red-800',
 };
 
-export default function JobDetails({ job, isOpen, setIsOpen, isManager }: JobDetailsProps) {
+export default function JobDetails({ job, isOpen, setIsOpen, isManager, onUpdate }: JobDetailsProps) {
   const { toast } = useToast();
 
   const handleStatusChange = async (newStatus: Job['status']) => {
-    const jobRef = doc(db, 'jobs', job.id);
     try {
-      await updateDoc(jobRef, { status: newStatus });
+      storage.updateJob(job.id, { status: newStatus });
       toast({
         title: 'Status Updated',
         description: `Job #${job.contractNumber} is now ${newStatus}.`,
       });
+      onUpdate?.();
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -74,6 +74,7 @@ export default function JobDetails({ job, isOpen, setIsOpen, isManager }: JobDet
             <p className="text-sm"><strong>Windows:</strong> {job.windowCount}</p>
             <p className="text-sm"><strong>Total Sq. Meters:</strong> {job.squareMeters}</p>
             <p className="text-sm"><strong>Total Circumference:</strong> {job.circumference}</p>
+            <p className="text-sm"><strong>Estimated Time:</strong> {job.estimatedTime}</p>
             <p className="text-sm"><strong>Add-ons:</strong> {addons || 'None'}</p>
             <p className="text-sm"><strong>Assigned Team:</strong> {job.teamName}</p>
           </div>

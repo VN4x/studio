@@ -1,5 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export type UserRole = 'manager' | 'team';
 
 export interface AppUser {
@@ -38,5 +36,5 @@ export interface Job {
   teamId: string;
   teamName?: string; 
   createdBy: string;
-  createdAt: Timestamp;
+  createdAt: Date;
 }

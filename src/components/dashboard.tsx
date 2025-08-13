@@ -1,42 +1,46 @@
 "use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { signOut } from 'firebase/auth';
 import { useAuth } from '@/hooks/use-auth';
-import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { LogOut, PlusCircle } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import JobForm from './job-form';
 import Calendar from './calendar';
+import LoginForm from './login-form';
 
 export default function Dashboard() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, logout } = useAuth();
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
-
-  if (loading || !user) {
-    return null; // Or a loading spinner, but AuthProvider already has one
+  if (!user) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <div className="w-full max-w-md">
+          <div className="mb-8 flex flex-col items-center text-center">
+            <div className="mb-4 flex items-center gap-2 text-2xl font-bold text-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8 text-primary">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <h1 className="text-3xl font-bold tracking-tighter text-foreground">ClearVue Scheduler</h1>
+            </div>
+            <p className="text-muted-foreground">Sign in to access your schedule</p>
+          </div>
+          <LoginForm />
+        </div>
+      </main>
+    );
   }
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    router.push('/login');
-  };
-  
   const isManager = user.role === 'manager';
 
   return (
     <div className="flex h-screen w-full flex-col">
       <header className="flex h-16 items-center justify-between border-b bg-card px-4 md:px-6">
         <div className="flex items-center gap-3">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7 text-primary"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7 text-primary">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">ClearVue Scheduler</h1>
         </div>
         <div className="flex items-center gap-4">
@@ -59,7 +63,7 @@ export default function Dashboard() {
               </SheetContent>
             </Sheet>
           )}
-          <Button variant="outline" size="icon" onClick={handleLogout} aria-label="Log out">
+          <Button variant="outline" size="icon" onClick={logout} aria-label="Log out">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

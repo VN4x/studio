@@ -1,11 +1,11 @@
 "use client";
 
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useEffect, useState, useTransition } from 'react';
-import { collection, addDoc, getDocs, serverTimestamp, query, where, getDoc, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { useEffect, useState } from 'react';
+import { storage } from '@/lib/storage';
+import { generateId } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,11 +15,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import type { Job, Team } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
-import { WandSparkles, AlertTriangle } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
-import { suggestEstimatedTime } from '@/ai/flows/suggest-estimated-time';
-import { enhanceJobNotes } from '@/ai/flows/enhance-job-notes';
-
 
 const jobFormSchema = z.object({
   date: z.string().min(1, 'Date is required'),
@@ -48,7 +43,6 @@ export default function JobForm() {
   const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
 
   const form = useForm<JobFormValues>({
     resolver: zodResolver(jobFormSchema),
@@ -67,71 +61,23 @@ export default function JobForm() {
       teamId: '',
     },
   });
-  
-  const { watch } = form;
-  const watchedFieldsForEstimation = watch(["windowCount", "squareMeters", "circumference", "addons", "notes"]);
-
 
   useEffect(() => {
-    const fetchTeams = async () => {
-      const teamsCollection = collection(db, 'teams');
-      const teamSnapshot = await getDocs(teamsCollection);
-      setTeams(teamSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Team[]);
-    };
-    fetchTeams();
+    const allTeams = storage.getTeams();
+    setTeams(allTeams);
   }, []);
 
-  const handleSuggestTime = async () => {
-    startTransition(async () => {
-      const [windowCount, squareMeters, circumference, addons, notes] = watchedFieldsForEstimation;
-      if (!windowCount || !squareMeters || !circumference) {
-        toast({
-          variant: 'destructive',
-          title: 'Missing Information',
-          description: 'Please fill in window count, square meters, and circumference to suggest a time.',
-        });
-        return;
-      }
-      
-      try {
-        const result = await suggestEstimatedTime({
-          windowCount,
-          squareMeters,
-          circumference,
-          addons,
-          notes: notes || '',
-        });
-        form.setValue('estimatedTime', result.estimatedTime);
-        toast({
-          title: 'Time Suggested',
-          description: `AI suggested an estimated time of ${result.estimatedTime}.`,
-        });
-      } catch (error) {
-        toast({
-          variant: 'destructive',
-          title: 'AI Error',
-          description: 'Could not suggest an estimated time.',
-        });
-      }
-    });
-  };
-
-  const checkConflicts = async (newJob: JobFormValues): Promise<boolean> => {
-    const q = query(
-      collection(db, 'jobs'),
-      where('teamId', '==', newJob.teamId),
-      where('date', '==', newJob.date)
+  const checkConflicts = (newJob: JobFormValues): boolean => {
+    const existingJobs = storage.getJobs();
+    const jobsOnSameDay = existingJobs.filter(
+      job => job.teamId === newJob.teamId && job.date === newJob.date
     );
-    const querySnapshot = await getDocs(q);
-    const jobsOnSameDay = querySnapshot.docs.map(doc => doc.data() as Job);
     
     // Basic time overlap check
     const newJobStart = new Date(`${newJob.date}T${newJob.time}`).getTime();
     return jobsOnSameDay.some(job => {
-        const existingJobStart = new Date(`${job.date}T${job.time}`).getTime();
-        // This is a very simple check, assuming jobs can't start at the exact same time.
-        // A more robust check would consider job duration.
-        return newJobStart === existingJobStart;
+      const existingJobStart = new Date(`${job.date}T${job.time}`).getTime();
+      return newJobStart === existingJobStart;
     });
   };
   
@@ -141,58 +87,45 @@ export default function JobForm() {
       return;
     }
 
-    startTransition(async () => {
-      const hasConflict = await checkConflicts(data);
-      if (hasConflict) {
-        toast({
-          variant: 'destructive',
-          title: 'Scheduling Conflict',
-          description: 'This team is already scheduled for a job at this exact date and time.',
-        });
-        return;
-      }
+    const hasConflict = checkConflicts(data);
+    if (hasConflict) {
+      toast({
+        variant: 'destructive',
+        title: 'Scheduling Conflict',
+        description: 'This team is already scheduled for a job at this exact date and time.',
+      });
+      return;
+    }
+    
+    try {
+      const team = teams.find(t => t.id === data.teamId);
+      const teamName = team?.name || 'Unknown';
       
-      try {
-        const teamDoc = await getDoc(doc(db, 'teams', data.teamId));
-        const teamName = teamDoc.exists() ? teamDoc.data().name : 'Unknown';
-        
-        const addonsList = Object.entries(data.addons)
-            .filter(([, value]) => value)
-            .map(([key]) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()))
-            .join(', ');
+      const newJob: Job = {
+        ...data,
+        id: generateId(),
+        status: 'Scheduled',
+        createdBy: user.uid,
+        createdAt: new Date(),
+        teamName,
+        notes: data.notes || '',
+      };
 
-        const enhancedNotesResult = await enhanceJobNotes({
-            notes: data.notes || '',
-            contractNumber: data.contractNumber,
-            clientAddress: data.clientAddress,
-            windowCount: data.windowCount,
-            squareMeters: data.squareMeters,
-            circumference: data.circumference,
-            addons: addonsList || 'None'
-        });
+      storage.saveJob(newJob);
 
-        await addDoc(collection(db, 'jobs'), {
-          ...data,
-          status: 'Scheduled',
-          createdBy: user.uid,
-          createdAt: serverTimestamp(),
-          notes: enhancedNotesResult.enhancedNotes,
-        });
-
-        toast({
-          title: 'Job Created',
-          description: `Job #${data.contractNumber} has been scheduled successfully.`,
-        });
-        form.reset();
-      } catch (error) {
-        console.error('Error creating job:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to create job. Please try again.',
-        });
-      }
-    });
+      toast({
+        title: 'Job Created',
+        description: `Job #${data.contractNumber} has been scheduled successfully.`,
+      });
+      form.reset();
+    } catch (error) {
+      console.error('Error creating job:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to create job. Please try again.',
+      });
+    }
   };
 
   return (
@@ -212,10 +145,7 @@ export default function JobForm() {
         <FormField control={form.control} name="estimatedTime" render={({ field }) => (
             <FormItem>
               <FormLabel>Estimated Time</FormLabel>
-              <div className="flex gap-2">
-                <FormControl><Input placeholder="e.g., 4 hours" {...field} /></FormControl>
-                <Button type="button" variant="outline" onClick={handleSuggestTime} disabled={isPending}><WandSparkles className="h-4 w-4" /></Button>
-              </div>
+              <FormControl><Input placeholder="e.g., 4 hours" {...field} /></FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -290,7 +220,7 @@ export default function JobForm() {
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full" disabled={isPending}>{isPending ? 'Scheduling...' : 'Create Job'}</Button>
+        <Button type="submit" className="w-full">Create Job</Button>
       </form>
     </Form>
   );

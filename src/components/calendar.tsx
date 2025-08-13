@@ -5,8 +5,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { collection, query, where, onSnapshot, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { storage } from '@/lib/storage';
 import type { AppUser, Job, Team } from '@/lib/types';
 import JobDetails from './job-details';
 
@@ -27,39 +26,36 @@ export default function Calendar({ user }: CalendarProps) {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchTeams = async () => {
-      const teamsCollection = collection(db, 'teams');
-      const teamSnapshot = await getDocs(teamsCollection);
-      const teamList = teamSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Team[];
-      setTeams(teamList);
-    };
-    fetchTeams();
-  }, []);
+  const loadData = useCallback(() => {
+    const allTeams = storage.getTeams();
+    setTeams(allTeams);
 
-  useEffect(() => {
-    let q;
-    if (user.role === 'manager') {
-      q = query(collection(db, 'jobs'));
-    } else {
-      q = query(collection(db, 'jobs'), where('teamId', '==', user.teamId || ''));
+    let allJobs = storage.getJobs();
+    
+    // Filter jobs based on user role
+    if (user.role === 'team' && user.teamId) {
+      allJobs = allJobs.filter(job => job.teamId === user.teamId);
     }
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const jobsData = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        const team = teams.find(t => t.id === data.teamId);
-        return {
-          id: doc.id,
-          ...data,
-          teamName: team?.name || 'Unknown Team',
-        } as Job;
-      });
-      setJobs(jobsData);
+    // Add team names to jobs
+    const jobsWithTeamNames = allJobs.map(job => {
+      const team = allTeams.find(t => t.id === job.teamId);
+      return {
+        ...job,
+        teamName: team?.name || 'Unknown Team',
+      };
     });
 
-    return () => unsubscribe();
-  }, [user, teams]);
+    setJobs(jobsWithTeamNames);
+  }, [user]);
+
+  useEffect(() => {
+    loadData();
+    
+    // Set up periodic refresh to catch updates from other components
+    const interval = setInterval(loadData, 1000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const calendarEvents = jobs.map((job) => ({
     id: job.id,
@@ -74,6 +70,10 @@ export default function Calendar({ user }: CalendarProps) {
     setSelectedJob(clickInfo.event.extendedProps);
     setIsDetailsOpen(true);
   }, []);
+
+  const handleJobUpdate = useCallback(() => {
+    loadData(); // Refresh data when job is updated
+  }, [loadData]);
 
   return (
     <>
@@ -97,6 +97,7 @@ export default function Calendar({ user }: CalendarProps) {
           isOpen={isDetailsOpen}
           setIsOpen={setIsDetailsOpen}
           isManager={user.role === 'manager'}
+          onUpdate={handleJobUpdate}
         />
       )}
     </>

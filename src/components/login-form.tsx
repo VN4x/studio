@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,22 +14,27 @@ export default function LoginForm() {
   const [password, setPassword] = useState('120Zx/44y6@');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const { login } = useAuth();
   const { toast } = useToast();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      toast({
-        title: 'Login Successful',
-        description: "Welcome back!",
-      });
-      router.push('/');
+      const success = await login(email, password);
+      if (success) {
+        toast({
+          title: 'Login Successful',
+          description: "Welcome back!",
+        });
+      } else {
+        setError('Invalid email or password.');
+      }
     } catch (err: any) {
       setError(err.message || 'An unknown error occurred.');
+    } finally {
       setLoading(false);
     }
   };
@@ -67,14 +70,14 @@ export default function LoginForm() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-       <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Demo Accounts</AlertTitle>
-          <AlertDescription>
-            <p>Manager: manager@clearvue.dev (password: 120Zx/44y6@)</p>
-            <p>Team: team@clearvue.dev (password: password)</p>
-          </AlertDescription>
-        </Alert>
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Demo Accounts</AlertTitle>
+        <AlertDescription>
+          <p>Manager: manager@clearvue.dev (password: 120Zx/44y6@)</p>
+          <p>Team: team@clearvue.dev (password: password)</p>
+        </AlertDescription>
+      </Alert>
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? 'Signing In...' : 'Sign In'}
       </Button>
