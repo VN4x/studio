@@ -30,8 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     // Simple authentication - in a real app, this would be more secure
     const validCredentials = [
-      { email: 'manager@clearvue.dev', password: '****' },
-      { email: 'team@clearvue.dev', password: '*****' }
+      { email: 'manager@clearvue.dev', password: '*donR*g@b' },
+      { email: 'team@clearvue.dev', password: 'zeem' }
     ];
 
     const isValid = validCredentials.some(
